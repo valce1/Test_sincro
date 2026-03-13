@@ -9,9 +9,11 @@ clear; close all; clc;
 %  tre tabelle: test_data.CDAQ, test_data.CAN250, test_data.CAN500.
 %
 %  Segnale di sincronismo:
-%    CDAQ  → canale analogico 'Sincro' (0–24 V); soglia: SYNC_THR_CDAQ [V]
-%    CAN   → messaggio 0x1FF, bit 0 di B0 (segnale binario 0/1)
-%             Fallback CAN250: bit PressStartBut (bit 1 di B0) del msg 0x703
+%    CDAQ   → canale analogico 'Sincro' (0–24 V); soglia: SYNC_THR_CDAQ [V]
+%    CAN250 → messaggio 0x1FF, bit 0 di B0 (segnale binario 0/1)
+%              Fallback: bit PressStartBut (bit 1 di B0) del msg 0x703
+%    CAN500 → NON ha il messaggio di sync; viene allineato a CAN250 tramite
+%              il vettore tempi assoluto (entrambi registrati dallo stesso logger)
 % ========================================================================
 
 addpath(genpath('Support/'));
@@ -44,7 +46,7 @@ opts_can     = delimitedTextImportOptions( ...
 %% --- ID messaggi CAN da estrarre ----------------------------------------
 msg250 = ["0x703"; "0x1CFD08C1"; "0x1CFD08C2"; "0x18FEEE00"; "0x18FEEEC1"; ...
           "0x18FEEEC2"; "0x18FEEF00"; "0x18FEF700"; "0xCF00400"; "0xC000003"; "0x1FF"];
-msg500 = ["0x703"; "0x100"; "0x150"; "0x151"; "0x153"; "0x155"; "0x10B"; "0x1FF"];
+msg500 = ["0x703"; "0x100"; "0x150"; "0x151"; "0x153"; "0x155"; "0x10B"];
 
 %% --- Trova i test dai file CDAQ (test_XXX.tdms → ID = XXX) --------------
 cdaq_files = dir(fullfile(path_cdaq, 'test_*.tdms'));
@@ -93,17 +95,10 @@ for t = 1:numel(cdaq_files)
     data250 = rimuovi_missing(data250, opts_can);
     data500 = rimuovi_missing(data500, opts_can);
     
-    t_raw250 = parse_can_time(data250.time);
-    t_raw500 = parse_can_time(data500.time);
+    [t_raw250, t_start250] = parse_can_time(data250.time);
+    [t_raw500, t_start500] = parse_can_time(data500.time);
 
     % ---- 4. Fronte di salita del sync CAN -------------------------------
-    % CAN500: messaggio 0x1FF, bit 0 di B0 (posizione 8 in stringa dec2bin a 8 bit)
-    t0_can500 = find_can_sync(data500, t_raw500, "0x1FF", 8);
-    if isnan(t0_can500)
-        warning('Nessun sync in CAN500 per test %s – salto.\n', test_id);
-        continue
-    end
-
     % CAN250: prima cerca 0x1FF; se assente, usa PressStartBut da 0x703 (bit 1, pos 7)
     t0_can250 = find_can_sync(data250, t_raw250, "0x1FF", 8);
     if isnan(t0_can250)
@@ -115,8 +110,14 @@ for t = 1:numel(cdaq_files)
         continue
     end
 
-    fprintf('  CAN250 sync @ %.4f s\n', t0_can250);
-    fprintf('  CAN500 sync @ %.4f s\n', t0_can500);
+    % CAN500 non ha il messaggio di sync: si allinea a CAN250 tramite il
+    % vettore tempi assoluto (stessa sessione di acquisizione del logger).
+    %   t_assoluto = t_relativo + t_start
+    %   t0_can500_rel = (t0_can250 + t_start250) - t_start500
+    t0_can500 = t0_can250 + (t_start250 - t_start500);
+
+    fprintf('  CAN250 sync @ %.4f s  (assoluto: %.4f s)\n', t0_can250, t0_can250 + t_start250);
+    fprintf('  CAN500 allineato via vettore tempi @ %.4f s\n', t0_can500);
 
     % ---- 5. Sposta origine temporale al fronte di salita e taglia il pre-sync --
 
