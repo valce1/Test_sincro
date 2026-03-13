@@ -22,12 +22,12 @@ opts = delimitedTextImportOptions('VariableNames',varNames,...
                                 'DataLines', dataStartLine);
 
 
-dfiles250 = dir('.\data_CAN_txt\TESMEC_CAN_250kbaud\*.log'); %tutti i file .txt nella directory
-dfiles500 = dir('.\data_CAN_txt\TESMEC_CAN_500kbaud\*.log'); %tutti i file .txt nella directory
-path_save1 = ".\data_CAN_mat\";
+dfiles250 = dir('.\Data\CAN250\*.trc'); %tutti i file .txt nella directory
+dfiles500 = dir('.\Data\CAN500\*.trc'); %tutti i file .txt nella directory
+path_save1 = ".\Dataapp\";
 
 msg250 = ["0x703";"0x1CFD08C1";"0x1CFD08C2";"0x18FEEE00";"0x18FEEEC1";"0x18FEEEC2";"0x18FEEF00";"0x18FEF700";"0xCF00400";"0xC000003"];
-msg500 = ["0x703";"0x100";"0x150";"0x151";"0x153";"0x155";"0x10B"];
+msg500 = ["0x703";"0x100";"0x150";"0x151";"0x153";"0x155";"0x10B";"0x1FF"];
 
 
 for k = 1 : length(dfiles250)
@@ -37,8 +37,8 @@ for k = 1 : length(dfiles250)
 %     file250 = "Test_100.log";  %nome file
 %     file500 = "PROVA_100.log";
 
-    data250=readtable(strcat("./data_CAN_txt/TESMEC_CAN_250kbaud/",file250),opts);
-    data500=readtable(strcat("./data_CAN_txt/TESMEC_CAN_500kbaud/",file500),opts);
+    data250=readtable(strcat("./Data/CAN250/",file250),opts);
+    data500=readtable(strcat("./Data/CAN500/",file500),opts);
 
     CANmsg = cell(size(msg250,1)+size(msg500,1),4);
     for i=1:1:size(msg250,1)
@@ -236,7 +236,13 @@ for k = 1 : length(dfiles250)
                     ActY3Hex = strcat(data_app.B7); 
                     ActY3Dec = hex2dec(ActY3Hex);
                     tab = table(timestamp,AllBytes,RefY3Hex,RefY3Dec,ActY3Hex,ActY3Dec);
-
+                case "0x1FF"
+                    CANmsg{i,4} = "syncro";
+                    
+                    syncro = extractBetween(string(dec2bin(hex2dec(data_app.B0),8)),8,8);% è il 0 bit da Dx, quindi il 8 da Sx
+                    % AttVentola = dec2bin(hex2dec(data_app.B0));
+                    tab = table(timestamp,AllBytes,syncro);
+            
             end
         end
         CANmsg{i,3}=tab;
